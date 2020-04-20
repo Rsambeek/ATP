@@ -1,138 +1,176 @@
-from enum import Enum
+from copy import deepcopy
 
-inputCode = open("codeFile.penis", "r")
+inputFile = open("codeFile.bimsux", "r")
+inputCode = ""
+[(((inputCode += char) for char in word) for word in line) for line in inputCode]
+print(inputCode)
+
+
+class Token:
+    name = ""
+    tokenType = ""
+
+    def __init__(self, name: str = "", tokenType: str = ""):
+        self.name = name
+        self.tokenType = tokenType
+
+    def __repr__(self):
+        return "<class 'Token_" + self.name + ":" + self.tokenType + "'>"
+
+    def __str__(self):
+        return self.name + " : " + self.tokenType
+
+    def clear(self):
+        self.name = ""
+        self.tokenType = ""
+
+
+class Variable:
+    name: str
+    dataType: type
+    value: type
+
+    def __init__(self, name: str = "", dataType: type = None, value: type = None):
+        self.name = name
+        self.dataType = dataType
+        if value is not None:
+            self.value = value
+        else:
+            self.value = self.dataType()
+
+    def __repr__(self):
+        return "<" + str(self.dataType) + ":" + self.name + ">"
+
+    def __str__(self):
+        return self.name + " : " + str(self.dataType)
 
 
 class Interpreter:
     def __init__(self):
         self.tokenTypes = {"identifier": {},
-                           "keyword": {"if": [], "while": [], "return": [], "int": int, "float": float, "char": chr, "String": str},
+                           "keyword": {"int": int, "float": float, "char": chr, "String": str},
                            "separator": [],
-                           "operator": ["=", "+"],
-                           "literal": [],
-                           "comment": []}
-        self.variables = {}
+                           "operator": ["="],
+                           # "literal": [],
+                           # "comment": []
+                           }
+        # self.variables = {}
         self.brackets = []
         self.tokens = []
         self.error = ""
 
-    def defineVariable(self, keywordToken, identifierToken) -> None:
-        if identifierToken[0] in self.tokenTypes["identifier"]:
-            self.error = identifierToken[0] + " is already defined"
-            return
+    def defineVariable(self, keywordToken, identifierToken, identifierList) -> str:
+        if identifierToken.name in identifierList:
+            return identifierToken.name + " is already defined"
         else:
-            self.tokenTypes["identifier"][identifierToken[0]] = self.tokenTypes["keyword"][keywordToken[0]]
-            self.variables[identifierToken[0]] = self.tokenTypes["identifier"][identifierToken[0]]()
+            identifierList[identifierToken.name] = Variable(identifierToken.name, self.tokenTypes["keyword"][keywordToken.name])
             return
 
-    def assignVariable(self, identifierToken, valueToken) -> None:
-        if identifierToken[0] in self.tokenTypes["identifier"]:
-            if valueToken[1] == "literal":
-                self.variables[identifierToken[0]] = self.tokenTypes["identifier"][identifierToken[0]](valueToken[0])
-                return
-            elif valueToken[1] == "identifier":
-                self.variables[identifierToken[0]] = self.tokenTypes["identifier"][identifierToken[0]](self.variables[valueToken[0]])
-                return
+    def assignVariable(self, identifierToken, valueToken, identifierList) -> str:
+        if identifierToken.name in self.tokenTypes["identifier"]:
+            if valueToken.tokenType == "literal":
+                identifierList[identifierToken.name].value = identifierList[identifierToken.name].dataType(valueToken.name)
+            elif valueToken.tokenType == "identifier":
+                identifierList[identifierToken.name].value = identifierList[identifierToken.name].dataType(identifierList[valueToken.name].value)
 
-        else:
-            self.error = "bad assignment"
             return
+        else:
+            return "bad assignment"
+
+    def scanner(self, inputCode, tokens, currentToken=Token()):
+        if len(inputCode) > 0:
+            if inputCode[0] == " ":
+                if len(currentToken.name) != 0:
+                    tokens.append(deepcopy(currentToken))
+                    currentToken.clear()
+
+            elif inputCode[0] == ";":
+                tokens.append(deepcopy(currentToken))
+                currentToken.clear()
+
+            # elif line[0] == "\n":
+            #     print("UHM excuse me da fuck, this is not python. Use ; at the end of the line, like a civil programmer.")
+            #     return False
+
+            elif inputCode[0] == "'" or inputCode[0] == '"':
+                stringing = True
+                self.brackets.append(inputCode[0])
+                currentToken.tokenType = "literal"
+
+            elif inputCode[0] == "=":
+                if tokens[-1].name[0] == "=":
+                    tokens[-1].name += "="
+                else:
+                    if currentToken.name != "":
+                        tokens.append(deepcopy(currentToken))
+                        currentToken.clear()
+                    tokens.append(Token("=", "operator"))
+
+            elif inputCode[0].isalpha():
+                if currentToken.name == "" or currentToken.name[-1].isalpha():
+                    currentToken.name += inputCode[0]
+                else:
+                    print("its me alpha")
+                    return False
+
+            elif inputCode[0].isdigit():
+                if currentToken.name == "" or currentToken.name[-1].isdigit():
+                    currentToken.name += inputCode[0]
+                    if currentToken.tokenType == "":
+                        currentToken.tokenType = "literal"
+                else:
+                    print("its me digit")
+                    return False
+
+            self.scanner(inputCode[1:], tokens, currentToken)
+
+    def evaluator(self, tokens) -> None:
+        if len(tokens) > 0:
+            if tokens[0].name != "":
+                if tokens[0].tokenType == "":
+                    if tokens[0].name in self.tokenTypes["keyword"]:
+                        tokens[0].tokenType = "keyword"
+                    elif tokens[0].name in self.tokenTypes["separator"]:
+                        tokens[0].tokenType = "separator"
+                    elif tokens[0].name in self.tokenTypes["operator"]:
+                        tokens[0].tokenType = "operator"
+
+                    else:
+                        tokens[0].tokenType = "identifier"
+
+                self.evaluator(tokens[1:])
 
     def tokenizeCode(self, inputCode):
-        currentToken = [""]
+        self.scanner(inputCode, self.tokens)
 
-        def tokenize():
-            nonlocal currentToken
-            if len(currentToken) == 1 and len(currentToken[0]) > 0:
-                if currentToken[0] in self.tokenTypes["keyword"]:
-                    currentToken.append("keyword")
-                elif currentToken[0] in self.tokenTypes["separator"]:
-                    currentToken.append("separator")
-                elif currentToken[0] in self.tokenTypes["operator"]:
-                    currentToken.append("operator")
-
-                else:
-                    currentToken.append("identifier")
-
-            self.tokens.append(currentToken)
-            currentToken = [""]
-
-        for line in inputCode:
-            stringing = False
-            while len(line) > 0:
-                if stringing:
-                    if line[0] == self.brackets[-1]:
-                        stringing = False
-                        self.brackets.pop()
-                        tokenize()
-                    else:
-                        currentToken[0] += line[0]
-
-                else:
-                    if line[0] == " ":
-                        if len(currentToken[0]) != 0:
-                            tokenize()
-
-                    elif line[0] == ";":
-                        tokenize()
-
-                    # elif line[0] == "\n":
-                    #     print("UHM excuse me da fuck, this is not python. Use ; at the end of the line, like a civil programmer.")
-                    #     return False
-
-                    elif line[0] == "'" or line[0] == '"':
-                        stringing = True
-                        currentToken.append("literal")
-
-                    elif line[0] == "=":
-                        if self.tokens[-1][0][0] == "=":
-                            self.tokens[-1][0] += "="
-                        else:
-                            if len(currentToken[0]) != 0:
-                                tokenize()
-                            self.tokens.append(["=", "operator"])
-
-                    elif line[0].isalpha():
-                        if (len(currentToken[0]) == 0) or currentToken[-1].isalpha():
-                            currentToken[0] += line[0]
-                        else:
-                            print("its me alpha")
-                            return False
-
-                    elif line[0].isdigit():
-                        if (len(currentToken[0]) == 0) or currentToken[0][-1].isdigit():
-                            currentToken[0] += line[0]
-                            if len(currentToken) == 1:
-                                currentToken.append("literal")
-                        else:
-                            print("its me digit")
-                            return False
-
-                line = line[1:]
+        self.evaluator(self.tokens)
 
         tokenIndex = 0
         while tokenIndex < len(self.tokens):
-            if self.tokens[tokenIndex][1] == "keyword":
-                self.defineVariable(self.tokens[tokenIndex], self.tokens[tokenIndex + 1])
+            if self.tokens[tokenIndex].tokenType == "keyword":
+                self.defineVariable(self.tokens[tokenIndex], self.tokens[tokenIndex + 1], self.tokenTypes["identifier"])
                 tokenIndex += 1
 
-            elif self.tokens[tokenIndex][1] == "operator":
-                self.assignVariable(self.tokens[tokenIndex - 1], self.tokens[tokenIndex + 1])
-                tokenIndex += 1
+            elif self.tokens[tokenIndex].tokenType == "operator":
+                if tokenIndex != 0 and len(self.tokens) > tokenIndex + 1:
+                    self.tokens[tokenIndex + 1]
+                    self.assignVariable(self.tokens[tokenIndex - 1], self.tokens[tokenIndex + 1], self.tokenTypes["identifier"])
+                    tokenIndex += 1
+                else:
+                    self.error += "unexpected operator"
 
-            # elif self.tokens[tokenIndex][1] == "identifier":
-            #     self.
-
-            # elif (tokens[index] == "=" and tokens[index-1] != None):
             else:
-                print("Failed recognizing token: " + self.tokens[0][0])
+                print("Failed recognizing token: " + self.tokens[tokenIndex].name)
                 return False
             tokenIndex += 1
-        print(self.tokenTypes["identifier"])
+
         print(self.tokens)
-        print(self.variables)
+        print(self.tokenTypes["identifier"])
+        for variable in self.tokenTypes["identifier"]:
+            print(self.tokenTypes["identifier"][variable].name, self.tokenTypes["identifier"][variable].value, end=" | ")
+        print(self.error)
         return True
 
 interpreter = Interpreter()
-if not interpreter.tokenizeCode(inputCode) :
+if not interpreter.tokenizeCode(inputCode):
     print("Something went wrong")
