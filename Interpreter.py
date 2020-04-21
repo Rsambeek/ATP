@@ -2,8 +2,10 @@ from copy import deepcopy
 
 inputFile = open("codeFile.bimsux", "r")
 inputCode = ""
-[(((inputCode += char) for char in word) for word in line) for line in inputCode]
-print(inputCode)
+for line in inputFile:
+    for word in line:
+        for char in word:
+            inputCode += char
 
 
 class Token:
@@ -30,7 +32,7 @@ class Variable:
     dataType: type
     value: type
 
-    def __init__(self, name: str = "", dataType: type = None, value: type = None):
+    def __init__(self, name: str, dataType: type, value: type = None):
         self.name = name
         self.dataType = dataType
         if value is not None:
@@ -44,6 +46,10 @@ class Variable:
     def __str__(self):
         return self.name + " : " + str(self.dataType)
 
+    def assignVariable(self, valueToken: Token) -> None:
+        self.value = self.dataType(valueToken.name)
+        # return "bad assignment"
+
 
 class Interpreter:
     def __init__(self):
@@ -54,7 +60,6 @@ class Interpreter:
                            # "literal": [],
                            # "comment": []
                            }
-        # self.variables = {}
         self.brackets = []
         self.tokens = []
         self.error = ""
@@ -66,16 +71,8 @@ class Interpreter:
             identifierList[identifierToken.name] = Variable(identifierToken.name, self.tokenTypes["keyword"][keywordToken.name])
             return
 
-    def assignVariable(self, identifierToken, valueToken, identifierList) -> str:
-        if identifierToken.name in self.tokenTypes["identifier"]:
-            if valueToken.tokenType == "literal":
-                identifierList[identifierToken.name].value = identifierList[identifierToken.name].dataType(valueToken.name)
-            elif valueToken.tokenType == "identifier":
-                identifierList[identifierToken.name].value = identifierList[identifierToken.name].dataType(identifierList[valueToken.name].value)
-
-            return
-        else:
-            return "bad assignment"
+    def operatorAssign(self, identifierToken: Token) -> Variable.assignVariable:
+        return self.tokenTypes["identifier"][identifierToken.name].assignVariable
 
     def scanner(self, inputCode, tokens, currentToken=Token()):
         if len(inputCode) > 0:
@@ -93,9 +90,13 @@ class Interpreter:
             #     return False
 
             elif inputCode[0] == "'" or inputCode[0] == '"':
-                stringing = True
-                self.brackets.append(inputCode[0])
-                currentToken.tokenType = "literal"
+                if (len(self.brackets) > 0 and inputCode[0] == self.brackets[-1]):
+                    self.brackets.pop()
+                    tokens.append(deepcopy(currentToken))
+                    currentToken.clear()
+                else:
+                    self.brackets.append(inputCode[0])
+                    currentToken.tokenType = "literal"
 
             elif inputCode[0] == "=":
                 if tokens[-1].name[0] == "=":
@@ -140,6 +141,13 @@ class Interpreter:
 
                 self.evaluator(tokens[1:])
 
+    def runner(self, tokenList: [Token]) -> [Token, None]:
+        if tokenList[0] == ";":
+            return []
+        else:
+            return self.runner(tokenList[1:]).insert(0, tokenList[0])
+
+
     def tokenizeCode(self, inputCode):
         self.scanner(inputCode, self.tokens)
 
@@ -153,8 +161,7 @@ class Interpreter:
 
             elif self.tokens[tokenIndex].tokenType == "operator":
                 if tokenIndex != 0 and len(self.tokens) > tokenIndex + 1:
-                    self.tokens[tokenIndex + 1]
-                    self.assignVariable(self.tokens[tokenIndex - 1], self.tokens[tokenIndex + 1], self.tokenTypes["identifier"])
+                    self.operatorAssign(self.tokens[tokenIndex-1])(self.tokens[tokenIndex + 1])
                     tokenIndex += 1
                 else:
                     self.error += "unexpected operator"
