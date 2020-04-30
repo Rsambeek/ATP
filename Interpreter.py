@@ -27,7 +27,7 @@ class Token:
         return "<class 'Token_" + self.name + ":" + self.tokenType + "'>"
 
     def __str__(self):
-        return self.name + " : " + self.tokenType
+        return str(self.name) + " : " + str(self.tokenType)
 
 class Function:
     code = None
@@ -40,6 +40,15 @@ class Function:
         self.parameters = parameters
         self.order = order
         self.environment = environment
+
+
+class ASTBranch:
+    function = None
+    arguments = ()
+
+    def __init__(self, function, arguments: tuple = ()):
+        self.function = function
+        self.arguments = arguments
 
 
 class Variable:
@@ -63,14 +72,16 @@ class Variable:
 
 
 # Variable Functions
-def assignVariable(token1: Token, token2: Token, variableList: List[dict]) -> Variable:
-    if token2.tokenType == "identifier":
-        newValue = variableList[0][token2.name].value
+def makeLiteral(token: Token, variableList: List[dict]) -> Token:
+    if token.tokenType == "identifier":
+        return Token(variableList[0][token.name].value, "literal")
     else:
-        newValue = token2.name
+        return token
 
-    variableList[0][token1.name].value = variableList[0][token1.name].dataType(newValue)
-    return token1
+
+def assignVariable(token1: Token, token2: Token, variableList: List[dict]) -> None:
+    variableList[0][token1.name].value = variableList[0][token1.name].dataType(token2.name)
+    return
 
 
 # Assignments
@@ -88,26 +99,40 @@ def newString(identifierToken: Token, variableList: List[dict]) -> Token:
     return identifierToken
 
 # Operators
-def add(token1: Token, token2: Token) -> int:
-    return int(token1.name) + int(token2.name)
+def add(token1: Token, token2: Token) -> Token:
+    return Token(int(token1.name) + int(token2.name))
+def subtract(token1: Token, token2: Token) -> Token:
+    return Token(int(token1.name) - int(token2.name))
+def multiply(token1: Token, token2: Token) -> Token:
+    return Token(int(token1.name) * int(token2.name))
+def devide(token1: Token, token2: Token) -> Token:
+    return Token(int(token1.name) / int(token2.name))
 
 
 
 def tokenizeCode(inputCode):
+    operations = {"int": Function(lambda x, variableScope: newInt(x, variableScope), 1, 10, ["identifier"]),
+                  "float": Function(lambda x, variableScope: newFloat(x, variableScope), 1, 10, ["identifier"]),
+                  "char": Function(lambda x, variableScope: newChar(x, variableScope), 1, 10, ["identifier"]),
+                  "String": Function(lambda x, variableScope: newString(x, variableScope), 1, 10, ["identifier"]),
+                  "=": Function(lambda x, y, variableScope: assignVariable(x, makeLiteral(y, variableScope), variableScope), 2, 90, ["identifier"]),
+                  "+": Function(lambda x, y, variableScope: add(makeLiteral(x, variableScope), makeLiteral(y, variableScope)), 2, 29, ["identifier"]),
+                  "-": Function(lambda x, y, variableScope: subtract(makeLiteral(x, variableScope), makeLiteral(y, variableScope)), 2, 29, ["identifier"]),
+                  "*": Function(lambda x, y, variableScope: multiply(makeLiteral(x, variableScope), makeLiteral(y, variableScope)), 2, 28, ["identifier"]),
+                  "/": Function(lambda x, y, variableScope: devide(makeLiteral(x, variableScope), makeLiteral(y, variableScope)), 2, 28, ["identifier"]),
+                  "(": Function(lambda x, y, variableScope: devide(makeLiteral(x, variableScope), makeLiteral(y, variableScope)), 2, 28, ["identifier"]),
+                  "[": Function(lambda x, y, variableScope: devide(makeLiteral(x, variableScope), makeLiteral(y, variableScope)), 2, 28, ["identifier"]),
+                  "{": Function(lambda x, y, variableScope: devide(makeLiteral(x, variableScope), makeLiteral(y, variableScope)), 2, 28, ["identifier"])}
     identifier = {}
-    orderOfOperations = {"int": Function(lambda x, variableScope: newInt(x, variableScope), 1, 1, ["identifier"]),
-                         "float": Function(lambda x, variableScope: newFloat(x, variableScope), 1, 1, ["identifier"]),
-                         "char": Function(lambda x, variableScope: newChar(x, variableScope), 1, 1, ["identifier"]),
-                         "String": Function(lambda x, variableScope: newString(x, variableScope), 1, 1, ["identifier"]),
-                         "=": Function(lambda x, y, variableScope: assignVariable(x, y, variableScope), 2, 9, ["identifier"])}
     keyword = ["int", "float", "char", "String"]
-    separator = [";"]
-    operator = ["="]
+    separator = {";": ";", "(": ")", ")": "(", "[": "]", "]": "[", "{": "}", "}": "{"}
+    operator = ["=", "+", "-", "*", "/"]
 
-    environment = {"identifier": identifier, "keyword": keyword, "separator": separator, "operator": operator}
-
-    bracketStack = []
-    tokens = []
+    environment = {"operations": operations,
+                   "identifier": identifier,
+                   "keyword": keyword,
+                   "separator": separator,
+                   "operator": operator}
 
 
     # Interpreter Steps
@@ -127,43 +152,40 @@ def tokenizeCode(inputCode):
             return token
 
 
-    def lexer(inputCode, currentToken=Token(), bracketStack=[]) -> list:
+    def lexer(inputCode, currentToken=Token()) -> List[List[Token]]:
         if len(inputCode) <= 0:
-            return list()
+            return list(list())
         else:
             if inputCode[0] == " ":
                 if len(currentToken.name) != 0:
-                    temp = lexer(inputCode[1:], Token(), bracketStack)
-                    temp.insert(0, evaluator(currentToken))
+                    temp = lexer(inputCode[1:], Token())
+                    temp[0].insert(0, evaluator(currentToken))
                     return temp
 
             elif inputCode[0] == ";":
                 if len(currentToken.name) != 0:
-                    temp = lexer(inputCode[1:], Token(), bracketStack)
-                    temp.insert(0, evaluator(Token(";")))
-                    temp.insert(0, evaluator(currentToken))
+                    temp = lexer(inputCode[1:], Token())
+                    temp.insert(0, list())
+                    temp[0].insert(0, evaluator(currentToken))
                     return temp
 
-            elif inputCode[0] == "'" or inputCode[0] == '"':
-                if (len(bracketStack) > 0 and inputCode[0] == bracketStack[-1]):
-                    bracketStack.pop()
-                    temp = lexer(inputCode[1:], currentToken, bracketStack)
-                    temp.insert(0, evaluator(currentToken))
-                    return temp
-                else:
-                    bracketStack.append(inputCode[0])
-                    currentToken.tokenType = "literal"
+            # elif inputCode[0] == "'" or inputCode[0] == '"':
+            #     bracketStack.append(inputCode[0])
+            #
+            #     temp = lexer(inputCode[1:], Token(), bracketStack)
+            #     temp[0].insert(0, evaluator(currentToken))
+            #
+            #     currentToken.tokenType = "literal"
 
-            elif inputCode[0] == "=":
-                if currentToken.name == "=":
-                    currentToken.name += "="
+            elif inputCode[0] in operator or inputCode[0] in separator:
+                if currentToken.name != "":
+                    temp = lexer(inputCode[0:], Token())
+                    temp[0].insert(0, evaluator(currentToken))
                 else:
-                    if currentToken.name != "":
-                        return lexer(inputCode[1:], currentToken, bracketStack)
-                    else:
-                        temp = lexer(inputCode[1:], Token(), bracketStack)
-                        temp.insert(0, evaluator(Token("=")))
-                        return temp
+                    temp = lexer(inputCode[1:], Token())
+                    temp[0].insert(0, evaluator(Token(inputCode[0])))
+
+                return temp
 
             elif inputCode[0].isalpha():
                 currentToken.name += inputCode[0]
@@ -175,56 +197,12 @@ def tokenizeCode(inputCode):
                     currentToken.tokenType = "literal"
                 currentToken.name += inputCode[0]
 
-            temp = lexer(inputCode[1:], currentToken, bracketStack)
-            return temp
+        temp = lexer(inputCode[1:], currentToken)
+        return temp
 
-
-    # def deduce(token1: Token, token2: Token, identifier: dict):
-    #     token1 = deepcopy(token1)
-    #     token2 = deepcopy(token2)
-    #     print(token1.name + " | " + token2.name)
-    #
-    #     if token1.tokenType == "keyword":
-    #         keyword[token1.name](token2, identifier)
-    #         return token2
-    #
-    #     elif token2.tokenType == "operator":
-    #         if token2.name == "=":
-    #             token1.operation = "assigning"
-    #             return token1
-    #         elif token2.name == "+":
-    #             token1.operation = "adding"
-    #             return token1
-    #
-    #     elif token1.tokenType == "identifier":
-    #         action = None
-    #         print(token1)
-    #         if token1.operation == "assigning":
-    #             action = assignVariable
-    #         token1.operation = ""
-    #         return action(token1, token2, identifier)
-    #
-    #     elif token1.tokenType == "literal":
-    #         outputToken = Token()
-    #         action = None
-    #         if token1.operation == "adding":
-    #             action = add
-    #         else:
-    #             return "unexpected operator", True
-    #
-    #         token1.operation = ""
-    #         outputToken.name = action(token1, token2)
-    #         outputToken.tokenType = "literal"
-    #         return outputToken
-    #
-    #     else:
-    #         print("test")
-    #         return ("Failed recognizing token: " + token1.name + " | " + token2.name), True
-
-
-    def funtionalGetter(orderOfOperations: dict, token: Token) -> Union[Function, Token]:
-        if token.name in orderOfOperations:
-            return orderOfOperations[token.name]
+    def functionalGetter(operations: dict, token: Token) -> Union[Function, Token]:
+        if token.name in operations:
+            return operations[token.name]
         else:
             return token
 
@@ -244,85 +222,97 @@ def tokenizeCode(inputCode):
         else:
             return operation1
 
-    def treeConstructor(restFunctions: List[Union[Function, Token]]):
+    def bracketFinder(restList: List[Union[Function, Token]], environment: dict, bracketStack: List[chr]=[]) -> List[Union[Function, Token]]:
+        print(bracketStack, restList)
+        if len(bracketStack) == 0:
+            bracketStack.append(restList[0])
+            return bracketFinder(restList[1:], environment, bracketStack)
+
+        else:
+            if restList[0] in environment["separator"]:
+                bracketStack.append(restList[0])
+
+            elif bracketStack[-1] == restList[0]:
+                bracketStack.pop()
+                if len(bracketStack) <= 0:
+                    return []
+
+            return [restList[0]] + bracketFinder(restList[1:], environment, bracketStack)
+
+    def treeConstructor(restFunctions: List[Union[Function, Token]], environment: dict):
         currentHighest = reduce(compareOrder, restFunctions)
         currentHighestIndex = restFunctions.index(currentHighest)
-        print(type(currentHighest))
         if type(currentHighest) == Function:
             if currentHighest.parameters == 2:
                 if 0 < currentHighestIndex < len(restFunctions):
-                    return restFunctions[currentHighestIndex].code(treeConstructor(restFunctions[:currentHighestIndex]),
-                                                                   treeConstructor(restFunctions[currentHighestIndex+1:]),
-                                                                   list(map(environment.get, currentHighest.environment)))
+                    return ASTBranch(restFunctions[currentHighestIndex].code,
+                                     (treeConstructor(restFunctions[:currentHighestIndex], environment),
+                                      treeConstructor(restFunctions[currentHighestIndex+1:], environment),
+                                      list(map(environment.get, currentHighest.environment))))
                 else:
                     print("Unexpected Operation")
 
             else:
                 if currentHighestIndex != 0:
                     print("Unexpected Operation")
-                return restFunctions[currentHighestIndex].code(treeConstructor(restFunctions[currentHighestIndex+1:]),
-                                                               list(map(environment.get, currentHighest.environment)))
+                return ASTBranch(restFunctions[currentHighestIndex].code,
+                                 (treeConstructor(restFunctions[currentHighestIndex+1:], environment),
+                                  list(map(environment.get, currentHighest.environment))))
+        elif currentHighest.tokenType == "separator":
+            return ASTBranch(treeConstructor(bracketFinder(restFunctions,environment), environment))
+
         else:
             return currentHighest
 
 
 
-    def parser(tokens: List[Token], orderOfOperations: dict):
-        functions = list(map(lambda x: funtionalGetter(orderOfOperations, x), tokens))
+    def parser(tokens: List[List[Token]], environment: dict):
+        functions = list(map(lambda innerList: list(map(lambda item: functionalGetter(environment["operations"], item), innerList)), tokens))
+        AST = list(map(lambda currentExpression: treeConstructor(currentExpression, environment), functions))
 
-        AST = treeConstructor(functions)
+        return AST
 
-        return functions
-
-
-    def runner(tokens: list, identifier=dict(), index=0) -> [Token, None]:
-        if index + 1 >= len(tokens):
-            output = "\nEnd of code reached\nNo errors encountered\n\nVariableDump:\n"
-
-            for variable in identifier:
-                output += (str(identifier[variable].name) + " : " + str(identifier[variable].value) + "  |  ")
-
-            return output, False
+    def runASTBranch(input: Union[ASTBranch, Token]):
+        # print(input)
+        if type(input) != ASTBranch:
+            return input
         else:
-            output = ""
-            if tokens[index].tokenType == "keyword":
-                identifier = tokens[index].operation(tokens[index + 1], identifier)
-                index += 1
-
-            elif tokens[index].tokenType == "operator":
-                if index != 0 and len(tokens) > index + 1:
-                    identifier = tokens[index].operation(identifier[tokens[index - 1].name], tokens[index + 1], identifier)
-                    index += 1
-                else:
-                    return "unexpected operator", True
-
+            if input.arguments[-1] == []:
+                return input.function(*list(map(runASTBranch, input.arguments[:-1])))
             else:
-                return ("Failed recognizing token: " + tokens[index].name), True
+                return input.function(*list(map(runASTBranch, input.arguments)))
 
-            nextOutput, error = runner(tokens, identifier, index + 1)
-            return (output + nextOutput), False | error
-        # if tokenList[0] == ";":
-        #     return []
-        # else:
-        #     return self.runner(tokenList[1:]).insert(0, tokenList[0])
+    def runner(functions: List[ASTBranch]) -> [str]:
+        if len(functions) <= 0:
+            output = "\nEnd of code reached\nNo errors encountered\n\nVariableDump:\n"
+            return [output], False
+        else:
+            newOutput = runASTBranch(functions[0])
+            output = runner(functions[1:])
+            if newOutput is not None:
+                output[0].insert(0, newOutput)
+            return output
 
 
     tokens = lexer(inputCode)
-    newFunctions = parser(tokens, orderOfOperations)
-    # tokens = list(map(evaluator, tokens))
-
-    output,error = runner(tokens, identifier)
-
-
     print(tokens)
-    # print(error)
-    print(output)
-    return True
+    AST = parser(tokens, environment)
+    output = runner(AST)
+    output = [reduce(lambda x,y: x+y,output[0]), output[1]]
+
+
+    # print(tokens)
+    for variable in environment["identifier"]:
+        output[0] += (str(identifier[variable].dataType) + " " + str(identifier[variable].name) + " : " + str(identifier[variable].value) + "  |  ")
+    return output
 
 
 
 # sys.setrecursionlimit(0x100000)
 # threading.stack_size(256000000)
 
-if not tokenizeCode(inputCode):
+output = tokenizeCode(inputCode)
+if output[1]:
     print("Something went wrong")
+
+print(output[0])
