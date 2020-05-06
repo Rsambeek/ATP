@@ -44,6 +44,9 @@ class Function:
     def __repr__(self):
         return "<" + str(self.code) + ":" + str(self.parameters) + ">"
 
+    def __str__(self):
+        return "<" + str(self.code) + ":" + str(self.parameters) + ">"
+
 
 class ASTBranch:
     function = None
@@ -52,6 +55,12 @@ class ASTBranch:
     def __init__(self, function, arguments: tuple = ()):
         self.function = function
         self.arguments = arguments
+
+    def __repr__(self):
+        return str(self.function) + " : " + str(self.arguments)
+
+    def __str__(self):
+        return str(self.function) + " : " + str(self.arguments)
 
 
 class Variable:
@@ -76,35 +85,42 @@ class Variable:
 
 def tokenizeCode(inputCode):
     # Variable Functions
+    # makeLiteral :: Token -> List[dict] -> Token
     def makeLiteral(token: Token, variableList: List[dict]) -> Token:
         if token.tokenType == "identifier":
             return Token(variableList[0][token.name].value, "literal")
         else:
             return token
 
+    # assignVariable :: Token -> Token -> List[dict] -> None
     def assignVariable(token1: Token, token2: Token, variableList: List[dict]) -> None:
         variableList[0][token1.name].value = variableList[0][token1.name].dataType(token2.name)
         return token1
 
     # Assignments
+    # newInt :: Token -> List[dict] -> Token
     def newInt(identifierToken: Token, variableList: List[dict]) -> Token:
         variableList[0][identifierToken.name] = Variable(identifierToken.name, int)
         return identifierToken
 
+    # newFloat :: Token -> List[dict] -> Token
     def newFloat(identifierToken: Token, variableList: List[dict]) -> Token:
         variableList[0][identifierToken.name] = Variable(identifierToken.name, float)
         return identifierToken
 
+    # newChar :: Token -> List[dict] -> Token
     def newChar(identifierToken: Token, variableList: List[dict]) -> Token:
         variableList[0][identifierToken.name] = Variable(identifierToken.name, chr)
         return identifierToken
 
+    # newString :: Token -> List[dict] -> Token
     def newString(identifierToken: Token, variableList: List[dict]) -> Token:
         variableList[0][identifierToken.name] = Variable(identifierToken.name, str)
         return identifierToken
 
     # Key Operations
-    def ifStatement(token1: Union[Token, ASTBranch], codeBlock: Union[ASTBranch, None] = None):
+    # ifStatement :: Union[Token, ASTBranch] -> Union[ASTBranch, None] -> Token
+    def ifStatement(token1: Union[Token, ASTBranch], codeBlock: Union[ASTBranch, None] = None) -> Token:
         if type(token1) == ASTBranch:
             token1 = runASTBranch(token1)
         if int(token1.name) > 0:
@@ -117,6 +133,7 @@ def tokenizeCode(inputCode):
         else:
             return Token(0)
 
+    # whileStatement :: Union[Token, ASTBranch] -> Union[ASTBranch, None] -> List[dict] -> Token
     def whileStatement(token1: Union[Token, ASTBranch], codeBlock: ASTBranch, environment: List[dict]) -> List[str]:
         if type(token1) == ASTBranch:
             token1 = runASTBranch(token1)
@@ -135,17 +152,23 @@ def tokenizeCode(inputCode):
 
 
     # Operators
+    # add :: Token -> Token -> Token
     def add(token1: Token, token2: Token) -> Token:
         return Token(int(token1.name) + int(token2.name))
 
+    # subtract :: Token -> Token -> Token
     def subtract(token1: Token, token2: Token) -> Token:
         return Token(int(token1.name) - int(token2.name))
 
+    # multiply :: Token -> Token -> Token
     def multiply(token1: Token, token2: Token) -> Token:
         return Token(int(token1.name) * int(token2.name))
 
+    # devide :: Token -> Token -> Token
     def devide(token1: Token, token2: Token) -> Token:
         return Token(int(token1.name) / int(token2.name))
+
+
     operations = {"int": Function(lambda x, variableScope: newInt(x, variableScope), 1, 10, ["identifier"]),
                   "float": Function(lambda x, variableScope: newFloat(x, variableScope), 1, 10, ["identifier"]),
                   "char": Function(lambda x, variableScope: newChar(x, variableScope), 1, 10, ["identifier"]),
@@ -170,6 +193,7 @@ def tokenizeCode(inputCode):
 
 
     # Interpreter Steps
+    # evaluator :: Token -> Token
     def evaluator(token: Token) -> Token:
         if token.name != "":
             if token.tokenType == "":
@@ -186,7 +210,8 @@ def tokenizeCode(inputCode):
             return token
 
 
-    def lexer(inputCode, currentToken=Token()) -> List[List[Token]]:
+    # lexer :: str -> Token -> List[List[Token]]
+    def lexer(inputCode: str, currentToken=Token()) -> List[List[Token]]:
         if len(inputCode) <= 0:
             return list(list())
         else:
@@ -237,13 +262,15 @@ def tokenizeCode(inputCode):
         temp = lexer(inputCode[1:], currentToken)
         return temp
 
+    # functionalGetter :: -> dict -> Token -> Union[Function, Token]
     def functionalGetter(operations: dict, token: Token) -> Union[Function, Token]:
         if token.name in operations:
             return operations[token.name]
         else:
             return token
 
-    def compareOrder(operation1: Union[Function, Token, ASTBranch], operation2: Union[Function, Token]) -> Union[Function, Token, ASTBranch]:
+    # compareOrder :: Union [Function, Token, ASTBranch] -> Union [Function, Token, ASTBranch] -> Union[Function, Token, ASTBranch]
+    def compareOrder(operation1: Union[Function, Token, ASTBranch], operation2: Union[Function, Token, ASTBranch]) -> Union[Function, Token, ASTBranch]:
         if type(operation1) == Token and operation1.tokenType == "separator":
             return operation1
         elif type(operation2) == Token and operation2.tokenType == "separator":
@@ -264,6 +291,7 @@ def tokenizeCode(inputCode):
         else:
             return operation1
 
+    # companionBracketFinder :: List[Union[Function, Token]] -> List[chr] -> List[chr] -> Tuple(List[Union[Function, Token]], List[Union[Function, Token]])
     def companionBracketFinder(restList: List[Union[Function, Token]], separators: List[chr], bracketStack: List[chr]=[]) -> (List[Union[Function, Token]], List[Union[Function, Token]]):
         bracketPairs = {"(": ")", "[": "]", "{": "}"}
         if type(restList) == Token:
@@ -288,6 +316,7 @@ def tokenizeCode(inputCode):
             temp = companionBracketFinder(restList[1:], separators, bracketStack)
             return [restList[0]] + temp[0], temp[1]
 
+    # treeConstructor :: List[Union[Function, Token, ASTBranch]] -> dict -> Union[ASTBranch, Token]
     def treeConstructor(restFunctions: List[Union[Function, Token, ASTBranch]], environment: dict) -> Union[ASTBranch, Token]:
         currentHighest = reduce(compareOrder, restFunctions)
         currentHighestIndex = restFunctions.index(currentHighest)
@@ -323,12 +352,14 @@ def tokenizeCode(inputCode):
         else:
             return currentHighest
 
-    def parser(tokens: List[List[Token]], environment: dict):
+    # parser :: List[List[Token]] -> dict -> List[Union[ASTBranch, Token]]
+    def parser(tokens: List[List[Token]], environment: dict) -> List[Union[ASTBranch, Token]]:
         functions = list(map(lambda innerList: list(map(lambda item: functionalGetter(environment["operations"], item), innerList)), tokens))
         AST = list(map(lambda currentExpression: treeConstructor(currentExpression, environment), functions))
 
         return AST
 
+    # runASTBranch :: Union[ASTBranch, Token] -> Union[Token, str]
     def runASTBranch(input: Union[ASTBranch, Token]) -> Union[Token, str]:
         if type(input) != ASTBranch:
             return input
@@ -340,6 +371,7 @@ def tokenizeCode(inputCode):
             else:
                 return input.function(*list(map(runASTBranch, input.arguments)))
 
+    # runner:: List[ASTBranch] -> ([str], bool)
     def runner(functions: List[ASTBranch]) -> ([str], bool):
         if len(functions) <= 0:
             output = "\nEnd of code reached\nNo errors encountered\n\nVariableDump:\n"
