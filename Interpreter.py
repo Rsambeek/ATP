@@ -1,6 +1,4 @@
 import sys
-import threading
-from copy import deepcopy
 from typing import Tuple, List, Union, Any, Match
 from functools import reduce
 
@@ -85,8 +83,11 @@ class Variable:
 
 def tokenizeCode(inputCode):
     # Variable Functions
-    # makeLiteral :: Token -> List[dict] -> Token
-    def makeLiteral(token: Token, variableList: List[dict]) -> Token:
+    # makeLiteral :: Union[Token,ASTBranch] -> List[dict] -> Token
+    def makeLiteral(token: Union[Token, ASTBranch], variableList: List[dict]) -> Token:
+        if type(token) == ASTBranch:
+            token = makeLiteral(runASTBranch(token), variableList)
+
         if token.tokenType == "identifier":
             return Token(variableList[0][token.name].value, "literal")
         else:
@@ -119,10 +120,8 @@ def tokenizeCode(inputCode):
         return identifierToken
 
     # Key Operations
-    # ifStatement :: Union[Token, ASTBranch] -> Union[ASTBranch, None] -> Token
-    def ifStatement(token1: Union[Token, ASTBranch], codeBlock: Union[ASTBranch, None] = None) -> Token:
-        if type(token1) == ASTBranch:
-            token1 = runASTBranch(token1)
+    # ifStatement :: Token -> Union[ASTBranch, None] -> Token
+    def ifStatement(token1: Token, codeBlock: Union[ASTBranch, None] = None) -> Token:
         if int(token1.name) > 0:
             if codeBlock is not None:
                 output = None
@@ -133,11 +132,8 @@ def tokenizeCode(inputCode):
         else:
             return Token(0)
 
-    # whileStatement :: Union[Token, ASTBranch] -> Union[ASTBranch, None] -> List[dict] -> Token
-    def whileStatement(token1: Union[Token, ASTBranch], codeBlock: ASTBranch, environment: List[dict]) -> List[str]:
-        if type(token1) == ASTBranch:
-            token1 = runASTBranch(token1)
-
+    # whileStatement :: Token -> Union[ASTBranch, None] -> List[dict] -> Token
+    def whileStatement(token1: Token, codeBlock: ASTBranch, environment: List[dict]) -> List[str]:
         if int(makeLiteral(token1, environment).name) > 0:
             newOutput = runASTBranch(codeBlock)
             if type(newOutput) == Token:
