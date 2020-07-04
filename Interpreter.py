@@ -124,7 +124,6 @@ def tokenizeCode(inputCode):
 
     # Key Operations
     # ifStatement :: Token -> Union[ASTBranch, None] -> Token
-    @makeLiteralDecorator
     def ifStatement(token1: Token, codeBlock: Union[ASTBranch, None] = None) -> Token:
         if int(token1.name) > 0:
             if codeBlock is not None:
@@ -177,7 +176,7 @@ def tokenizeCode(inputCode):
                   "float": Function(lambda x, variableScope: newFloat(x, variableScope), 1, 10, ["identifier"]),
                   "char": Function(lambda x, variableScope: newChar(x, variableScope), 1, 10, ["identifier"]),
                   "String": Function(lambda x, variableScope: newString(x, variableScope), 1, 10, ["identifier"]),
-                  "if": Function(lambda x, y, variableScope: ifStatement(x, y, variableScope), 2, 20, ["identifier", "noRun"]),
+                  "if": Function(lambda x, y, variableScope: ifStatement(makeLiteral(x, variableScope), y), 2, 20, ["identifier", "noRun"]),
                   "while": Function(lambda x, y, variableScope: whileStatement(x, y, variableScope), 2, 20, ["identifier", "noRun"]),
                   "=": Function(lambda x, y, variableScope: assignVariable(x, makeLiteral(y, variableScope), variableScope), 2, 80, ["identifier"]),
                   "+": Function(lambda x, y, variableScope: add(x, y, variableScope), 2, 39, ["identifier"]),
