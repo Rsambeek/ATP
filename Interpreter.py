@@ -153,23 +153,23 @@ def tokenizeCode(inputCode):
 
     # Operators
     # add :: Token -> Token -> Token
-    # @makeLiteralDecorator
-    def add(token1: Token, token2: Token, variableList: List[dict]) -> Token:
+    @makeLiteralDecorator
+    def add(token1: Token, token2: Token) -> Token:
         return Token(int(token1.name) + int(token2.name))
 
     # subtract :: Token -> Token -> Token
     @makeLiteralDecorator
-    def subtract(token1: Token, token2: Token, variableList: List[dict]) -> Token:
+    def subtract(token1: Token, token2: Token) -> Token:
         return Token(int(token1.name) - int(token2.name), "literal")
 
     # multiply :: Token -> Token -> Token
-    # @makeLiteralDecorator
-    def multiply(token1: Token, token2: Token, variableList: List[dict]) -> Token:
+    @makeLiteralDecorator
+    def multiply(token1: Token, token2: Token) -> Token:
         return Token(int(token1.name) * int(token2.name))
 
     # devide :: Token -> Token -> Token
     @makeLiteralDecorator
-    def devide(token1: Token, token2: Token, variableList: List[dict]) -> Token:
+    def devide(token1: Token, token2: Token) -> Token:
         return Token(int(token1.name) / int(token2.name))
 
 
