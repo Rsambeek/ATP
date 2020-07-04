@@ -1,2 +1,2 @@
 int a = 100;
-if(a = a - a)(int b = 2);
+if(a - a)(int b = 2);

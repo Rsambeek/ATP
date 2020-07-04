@@ -1,5 +1,6 @@
 import sys
-from typing import Tuple, List, Union, Any, Match
+import inspect
+from typing import Tuple, List, Union, Any, Match, Callable
 from functools import reduce
 
 inputFile = open("codeFile.bimsux", "r")
@@ -11,7 +12,11 @@ for line in inputFile:
                 inputCode += char
 
 
-class Token:
+class BaseObject:
+    def printObject(self, name: str, attribute):
+        return str(name) + " : " + str(attribute)
+
+class Token(BaseObject):
     name = ""
     tokenType = ""
     operation = None
@@ -21,13 +26,10 @@ class Token:
         self.tokenType = tokenType
         self.operation = None
 
-    def __repr__(self):
-        return "<class 'Token_" + self.name + ":" + self.tokenType + "'>"
-
     def __str__(self):
-        return str(self.name) + " : " + str(self.tokenType)
+        return self.printObject(self.name, self.tokenType)
 
-class Function:
+class Function(BaseObject):
     code = None
     parameters: int
     order: int
@@ -39,14 +41,11 @@ class Function:
         self.order = order
         self.environment = environment
 
-    def __repr__(self):
-        return "<" + str(self.code) + ":" + str(self.parameters) + ">"
-
     def __str__(self):
-        return "<" + str(self.code) + ":" + str(self.parameters) + ">"
+        return self.printObject(self.code, self.parameters)
 
 
-class ASTBranch:
+class ASTBranch(BaseObject):
     function = None
     arguments = ()
 
@@ -54,14 +53,11 @@ class ASTBranch:
         self.function = function
         self.arguments = arguments
 
-    def __repr__(self):
-        return str(self.function) + " : " + str(self.arguments)
-
     def __str__(self):
-        return str(self.function) + " : " + str(self.arguments)
+        return self.printObject(self.function, self.arguments)
 
 
-class Variable:
+class Variable(BaseObject):
     name: str
     dataType: type
     value: type
@@ -74,24 +70,31 @@ class Variable:
         else:
             self.value = self.dataType()
 
-    def __repr__(self):
-        return "<" + str(self.dataType) + ":" + self.name + ">"
-
     def __str__(self):
-        return self.name + " : " + str(self.dataType)
+        return self.printObject(self.name, self.dataType)
 
 
 def tokenizeCode(inputCode):
     # Variable Functions
-    # makeLiteral :: Union[Token,ASTBranch] -> List[dict] -> Token
-    def makeLiteral(token: Union[Token, ASTBranch], variableList: List[dict]) -> Token:
+    # makeLiteral :: Union[Token,ASTBranch, Any] -> List[dict] -> Union[Token, Any]
+    def makeLiteral(token: Union[Token, ASTBranch, Any], variableList: List[dict]) -> Union[Token, Any]:
         if type(token) == ASTBranch:
             token = makeLiteral(runASTBranch(token), variableList)
 
-        if token.tokenType == "identifier":
+        if type(token) == Token and token.tokenType == "identifier":
             return Token(variableList[0][token.name].value, "literal")
         else:
             return token
+
+    def makeLiteralDecorator(func: Callable) -> Callable:
+        def inner(*args, **kwargs):
+            newArgs = list(map(lambda x: makeLiteral(x, args[-1]), args[:-1]))
+            if "variableList:List[dict]" in str(inspect.signature(func)):
+                args = newArgs + args[-1]
+            else:
+                args = newArgs
+            return func(*args, **kwargs)
+        return inner
 
     # assignVariable :: Token -> Token -> List[dict] -> None
     def assignVariable(token1: Token, token2: Token, variableList: List[dict]) -> None:
@@ -121,6 +124,7 @@ def tokenizeCode(inputCode):
 
     # Key Operations
     # ifStatement :: Token -> Union[ASTBranch, None] -> Token
+    @makeLiteralDecorator
     def ifStatement(token1: Token, codeBlock: Union[ASTBranch, None] = None) -> Token:
         if int(token1.name) > 0:
             if codeBlock is not None:
@@ -149,19 +153,23 @@ def tokenizeCode(inputCode):
 
     # Operators
     # add :: Token -> Token -> Token
-    def add(token1: Token, token2: Token) -> Token:
+    # @makeLiteralDecorator
+    def add(token1: Token, token2: Token, variableList: List[dict]) -> Token:
         return Token(int(token1.name) + int(token2.name))
 
     # subtract :: Token -> Token -> Token
-    def subtract(token1: Token, token2: Token) -> Token:
-        return Token(int(token1.name) - int(token2.name))
+    @makeLiteralDecorator
+    def subtract(token1: Token, token2: Token, variableList: List[dict]) -> Token:
+        return Token(int(token1.name) - int(token2.name), "literal")
 
     # multiply :: Token -> Token -> Token
-    def multiply(token1: Token, token2: Token) -> Token:
+    # @makeLiteralDecorator
+    def multiply(token1: Token, token2: Token, variableList: List[dict]) -> Token:
         return Token(int(token1.name) * int(token2.name))
 
     # devide :: Token -> Token -> Token
-    def devide(token1: Token, token2: Token) -> Token:
+    @makeLiteralDecorator
+    def devide(token1: Token, token2: Token, variableList: List[dict]) -> Token:
         return Token(int(token1.name) / int(token2.name))
 
 
@@ -169,13 +177,13 @@ def tokenizeCode(inputCode):
                   "float": Function(lambda x, variableScope: newFloat(x, variableScope), 1, 10, ["identifier"]),
                   "char": Function(lambda x, variableScope: newChar(x, variableScope), 1, 10, ["identifier"]),
                   "String": Function(lambda x, variableScope: newString(x, variableScope), 1, 10, ["identifier"]),
-                  "if": Function(lambda x, y, variableScope: ifStatement(makeLiteral(x, variableScope), y), 2, 20, ["identifier", "noRun"]),
+                  "if": Function(lambda x, y, variableScope: ifStatement(x, y, variableScope), 2, 20, ["identifier", "noRun"]),
                   "while": Function(lambda x, y, variableScope: whileStatement(x, y, variableScope), 2, 20, ["identifier", "noRun"]),
                   "=": Function(lambda x, y, variableScope: assignVariable(x, makeLiteral(y, variableScope), variableScope), 2, 80, ["identifier"]),
-                  "+": Function(lambda x, y, variableScope: add(makeLiteral(x, variableScope), makeLiteral(y, variableScope)), 2, 39, ["identifier"]),
-                  "-": Function(lambda x, y, variableScope: subtract(makeLiteral(x, variableScope), makeLiteral(y, variableScope)), 2, 39, ["identifier"]),
-                  "*": Function(lambda x, y, variableScope: multiply(makeLiteral(x, variableScope), makeLiteral(y, variableScope)), 2, 38, ["identifier"]),
-                  "/": Function(lambda x, y, variableScope: devide(makeLiteral(x, variableScope), makeLiteral(y, variableScope)), 2, 38, ["identifier"])}
+                  "+": Function(lambda x, y, variableScope: add(x, y, variableScope), 2, 39, ["identifier"]),
+                  "-": Function(lambda x, y, variableScope: subtract(x, y, variableScope), 2, 39, ["identifier"]),
+                  "*": Function(lambda x, y, variableScope: multiply(x, y, variableScope), 2, 38, ["identifier"]),
+                  "/": Function(lambda x, y, variableScope: devide(x, y, variableScope), 2, 38, ["identifier"])}
     identifier = {}
     keyword = ["int", "float", "char", "String", "if"]
     separator = [";", "(", ")", "[", "]", "{", "}"]
@@ -258,7 +266,7 @@ def tokenizeCode(inputCode):
         temp = lexer(inputCode[1:], currentToken)
         return temp
 
-    # functionalGetter :: -> dict -> Token -> Union[Function, Token]
+    # functionalGetter :: dict -> Token -> Union[Function, Token]
     def functionalGetter(operations: dict, token: Token) -> Union[Function, Token]:
         if token.name in operations:
             return operations[token.name]
