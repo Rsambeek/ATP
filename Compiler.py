@@ -108,14 +108,14 @@ def tokenizeCode(inputCode):
 
     # assignVariable :: Token -> Token -> List[dict] -> None
     def assignVariable(token1: Token, token2: Token) -> None:
-        returnValue = "\mov " + token1.name + ", " + token2.name + "\n"
-        return token1
+        returnValue = "mov " + token1.name + ", " + token2.name + "\n"
+        return returnValue
 
     # Definitions
     # newInt :: Token -> List[dict] -> Token
     def newInt(identifierToken: Token) -> Token:
         returnValue = "section .data\n" + identifierToken.name + " dw 0\n" + identifierToken.name + "len equ $ -" + identifierToken.name + "\n\n"
-        return identifierToken
+        return returnValue
 
     # # newFloat :: Token -> List[dict] -> Token
     # def newFloat(identifierToken: Token, variableList: List[dict]) -> Token:
@@ -136,7 +136,7 @@ def tokenizeCode(inputCode):
     # ifStatement :: Token -> Union[ASTBranch, None] -> Token
     def ifStatement(token1: Token, codeBlock: Union[ASTBranch, None] = None) -> Token:
         returnValue = "mov " + architect.R0 + ", [" + token1.name + "]\ncmp " + architect.R0 + ", 0\nje _afterif" + token1.name + "\n\n"
-        returnValue += runASTBranch(codeBlock)
+        returnValue += runASTBranch(codeBlock).name
         returnValue += "\n_afterif" + token1.name + ":\n\n"
         return returnValue
 
@@ -144,7 +144,7 @@ def tokenizeCode(inputCode):
     def whileStatement(token1: Token, codeBlock: ASTBranch) -> List[str]:
         returnValue = "mov " + architect.R0 + ", [" + token1.name + "]\ncmp " + architect.R0 + ", 0\nje _afterwhile" + token1.name + "\n_startwhile" + token1.name + "\n\n"
         returnValue += runASTBranch(codeBlock)
-        returnValue = "mov " + architect.R0 + ", [" + token1.name + "]\ncmp " + architect.R0 + ", 0\njne _startwhile" + token1.name + "\n"
+        returnValue += "mov " + architect.R0 + ", [" + token1.name + "]\ncmp " + architect.R0 + ", 0\njne _startwhile" + token1.name + "\n"
         returnValue += "\n_afterwhile" + token1.name + ":\n\n"
 
 
@@ -152,13 +152,17 @@ def tokenizeCode(inputCode):
     # add :: Token -> Token -> Token
     @registerPrepDecorator
     def add(token1: Token, token2: Token) -> Token:
-        returnValue = "add " + architect.R0 + ", " + architect.R1 + "\n"
+        returnValue = "mov " + architect.R0 + ", " + token1.name + "\n"
+        returnValue += "mov " + architect.R1 + ", " + token2.name + "\n"
+        returnValue += "add " + architect.R0 + ", " + architect.R1 + "\n"
         return returnValue
 
     # subtract :: Token -> Token -> Token
     @registerPrepDecorator
     def subtract(token1: Token, token2: Token) -> Token:
-        returnValue = "sub " + architect.R0 + ", " + architect.R1 + "\n"
+        returnValue = "mov " + architect.R0 + ", " + token1.name + "\n"
+        returnValue += "mov " + architect.R1 + ", " + token2.name + "\n"
+        returnValue += "sub " + architect.R0 + ", " + architect.R1 + "\n"
         return returnValue
 
     # # multiply :: Token -> Token -> Token
@@ -177,8 +181,8 @@ def tokenizeCode(inputCode):
                 # "float": Function(lambda x, variableScope: newFloat(x), 1, 10, ["identifier"]),
                 # "char": Function(lambda x, variableScope: newChar(x), 1, 10, ["identifier"]),
                 # "String": Function(lambda x, variableScope: newString(x), 1, 10, ["identifier"]),
-                "if": Function(lambda x, y, variableScope: ifStatement(x, y), 2, 20, ["identifier", "noRun"]),
-                "while": Function(lambda x, y, variableScope: whileStatement(x, y), 2, 20, ["identifier", "noRun"]),
+                "if": Function(lambda x, y, variableScope: ifStatement(x, y), 2, 20, ["identifier"]),
+                "while": Function(lambda x, y, variableScope: whileStatement(x, y), 2, 20, ["identifier"]),
                 "=": Function(lambda x, y, variableScope: assignVariable(x, y), 2, 80, ["identifier"]),
                 "+": Function(lambda x, y, variableScope: add(x, y), 2, 39, ["identifier"]),
                 "-": Function(lambda x, y, variableScope: subtract(x, y), 2, 39, ["identifier"])}
@@ -363,17 +367,21 @@ def tokenizeCode(inputCode):
 
         return AST
 
-    # runASTBranch :: Union[ASTBranch, Token] -> Union[Token, str]
-    def runASTBranch(input: Union[ASTBranch, Token]) -> Union[Token, str]:
-        if type(input) != ASTBranch:
+    # runASTBranch :: Union[ASTBranch, Token] -> str
+    def runASTBranch(input: Union[ASTBranch, Token]) -> str:
+        if type(input) == Token:
             return input
-        else:
+
+        elif type(input) == ASTBranch:
             if "noRun" in input.arguments[-1]:
                 input.arguments[-1].pop(input.arguments[-1].index("noRun"))
                 return input.function(*input.arguments)
 
             else:
                 return input.function(*list(map(runASTBranch, input.arguments)))
+
+        else:
+            return input
 
     # runner:: List[ASTBranch] -> ([str], bool)
     def runner(functions: List[ASTBranch]) -> ([str], bool):
@@ -383,7 +391,8 @@ def tokenizeCode(inputCode):
         else:
             newOutput = runASTBranch(functions[0])
             if type(newOutput) == Token:
-                newOutput = ""
+                newOutput = Token.name
+            print(newOutput)
             output = runner(functions[1:])
             if type(newOutput) == list:
                 return newOutput + output[0], output[1]
