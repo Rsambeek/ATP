@@ -100,21 +100,26 @@ def tokenizeCode(inputCode):
             index = 0
             returnValue = ""
             for arg in args:
-                returnValue += "mov " + architect.REGISTERS[index] + ", " + arg.name + "\n"
-                index += 1
+                if type(arg) == Token:
+                    returnValue += "mov " + architect.REGISTERS[index] + ", " + arg.name + "\n"
+                    index += 1
+                elif type(arg) == ASTBranch:
+                    returnValue += runASTBranch(arg)
             
-            return func(*args, **kwargs)
+            returnValue += func(*args, **kwargs)
+            return returnValue
         return inner
 
     # assignVariable :: Token -> Token -> List[dict] -> None
     def assignVariable(token1: Token, token2: Token) -> None:
+        # print(token1)
         returnValue = "mov " + token1.name + ", " + token2.name + "\n"
         return returnValue
 
     # Definitions
     # newInt :: Token -> List[dict] -> Token
     def newInt(identifierToken: Token) -> Token:
-        returnValue = "section .data\n" + identifierToken.name + " dw 0\n" + identifierToken.name + "len equ $ -" + identifierToken.name + "\n\n"
+        returnValue = "section .data\n" + identifierToken.name + " dw 0\n" + identifierToken.name + "len equ $ - " + identifierToken.name + "\n\n"
         return returnValue
 
     # # newFloat :: Token -> List[dict] -> Token
@@ -136,7 +141,7 @@ def tokenizeCode(inputCode):
     # ifStatement :: Token -> Union[ASTBranch, None] -> Token
     def ifStatement(token1: Token, codeBlock: Union[ASTBranch, None] = None) -> Token:
         returnValue = "mov " + architect.R0 + ", [" + token1.name + "]\ncmp " + architect.R0 + ", 0\nje _afterif" + token1.name + "\n\n"
-        returnValue += runASTBranch(codeBlock).name
+        returnValue += runASTBranch(codeBlock)
         returnValue += "\n_afterif" + token1.name + ":\n\n"
         return returnValue
 
@@ -392,7 +397,7 @@ def tokenizeCode(inputCode):
             newOutput = runASTBranch(functions[0])
             if type(newOutput) == Token:
                 newOutput = Token.name
-            print(newOutput)
+            # print(newOutput)
             output = runner(functions[1:])
             if type(newOutput) == list:
                 return newOutput + output[0], output[1]
