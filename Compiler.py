@@ -3,7 +3,7 @@ import inspect
 from typing import Tuple, List, Union, Any, Match, Callable
 from functools import reduce
 
-from architecture import x86 as architect
+from architecture import architecture, x86 as architect
 # from architecture import cortex as architect
 
 inputFile = open("codeFile.bimsux", "r")
@@ -110,17 +110,30 @@ def tokenizeCode(inputCode):
             return returnValue
         return inner
 
-    # assignVariable :: Token -> Token -> List[dict] -> None
-    def assignVariable(token1: Token, token2: Token) -> None:
+    # assignVariable :: Token -> Token -> List[dict] -> Token
+    def assignVariable(token1: Token, token2: Token) -> Token:
         # print(token1)
-        returnValue = "mov " + token1.name + ", " + token2.name + "\n"
-        return returnValue
+        returnToken = Token(token1.name)
+        if type(token1.operation) == str:
+            returnToken.operation = token1.operation
+        else:
+            returnToken.operation = ""
+        
+        returnToken.operation += "mov " + architect.R0 + ", " + token2.name + "\n"
+        returnToken.operation += "mov [" + token1.name + "], " + architect.R0 + "\n"
+        return returnToken
 
     # Definitions
     # newInt :: Token -> List[dict] -> Token
     def newInt(identifierToken: Token) -> Token:
-        returnValue = "section .data\n" + identifierToken.name + " dw 0\n" + identifierToken.name + "len equ $ - " + identifierToken.name + "\n\n"
-        return returnValue
+        returnToken = Token(identifierToken.name)
+        if type(identifierToken.operation) == str:
+            returnToken.operation = identifierToken.operation
+        else:
+            returnToken.operation = ""
+        
+        returnToken.operation += "section .data\n" + identifierToken.name + " dw 0\n" + identifierToken.name + "len equ $ - " + identifierToken.name + "\n\n"
+        return returnToken
 
     # # newFloat :: Token -> List[dict] -> Token
     # def newFloat(identifierToken: Token, variableList: List[dict]) -> Token:
@@ -140,35 +153,60 @@ def tokenizeCode(inputCode):
     # Key Operations
     # ifStatement :: Token -> Union[ASTBranch, None] -> Token
     def ifStatement(token1: Token, codeBlock: Union[ASTBranch, None] = None) -> Token:
-        returnValue = "mov " + architect.R0 + ", [" + token1.name + "]\ncmp " + architect.R0 + ", 0\nje _afterif" + token1.name + "\n\n"
-        returnValue += runASTBranch(codeBlock)
-        returnValue += "\n_afterif" + token1.name + ":\n\n"
-        return returnValue
+        returnToken = Token(token1.name)
+        if type(token1.operation) == str:
+            returnToken.operation = token1.operation
+        else:
+            returnToken.operation = ""
+        
+        returnToken.operation += "mov " + architect.R0 + ", [" + token1.name + "]\ncmp " + architect.R0 + ", 0\nje _afterif" + token1.name + "\n\n"
+        returnToken.operation += runASTBranch(codeBlock).operation
+        returnToken.operation += "\n_afterif" + token1.name + ":\n\n"
+        return returnToken
 
     # whileStatement :: Token -> Union[ASTBranch, None] -> List[dict] -> Token
     def whileStatement(token1: Token, codeBlock: ASTBranch) -> List[str]:
-        returnValue = "mov " + architect.R0 + ", [" + token1.name + "]\ncmp " + architect.R0 + ", 0\nje _afterwhile" + token1.name + "\n_startwhile" + token1.name + "\n\n"
-        returnValue += runASTBranch(codeBlock)
-        returnValue += "mov " + architect.R0 + ", [" + token1.name + "]\ncmp " + architect.R0 + ", 0\njne _startwhile" + token1.name + "\n"
-        returnValue += "\n_afterwhile" + token1.name + ":\n\n"
+        returnToken = Token(token1.name)
+        if type(token1.operation) == str:
+            returnToken.operation = token1.operation
+        else:
+            returnToken.operation = ""
+        
+        returnToken.operation += "mov " + architect.R0 + ", [" + token1.name + "]\ncmp " + architect.R0 + ", 0\nje _afterwhile" + token1.name + "\n_startwhile" + token1.name + "\n\n"
+        returnToken.operation += runASTBranch(codeBlock)
+        returnToken.operation += "mov " + architect.R0 + ", [" + token1.name + "]\ncmp " + architect.R0 + ", 0\njne _startwhile" + token1.name + "\n"
+        returnToken.operation += "\n_afterwhile" + token1.name + ":\n\n"
+        return returnToken
 
 
     # Operators
     # add :: Token -> Token -> Token
     @registerPrepDecorator
     def add(token1: Token, token2: Token) -> Token:
-        returnValue = "mov " + architect.R0 + ", " + token1.name + "\n"
-        returnValue += "mov " + architect.R1 + ", " + token2.name + "\n"
-        returnValue += "add " + architect.R0 + ", " + architect.R1 + "\n"
-        return returnValue
+        returnToken = Token(token1.name)
+        if type(token1.operation) == str:
+            returnToken.operation = token1.operation
+        else:
+            returnToken.operation = ""
+        
+        returnToken.operation += "mov " + architect.R0 + ", " + token1.name + "\n"
+        returnToken.operation += "mov " + architect.R1 + ", " + token2.name + "\n"
+        returnToken.operation += "add " + architect.R0 + ", " + architect.R1 + "\n"
+        return returnToken
 
     # subtract :: Token -> Token -> Token
     @registerPrepDecorator
     def subtract(token1: Token, token2: Token) -> Token:
-        returnValue = "mov " + architect.R0 + ", " + token1.name + "\n"
-        returnValue += "mov " + architect.R1 + ", " + token2.name + "\n"
-        returnValue += "sub " + architect.R0 + ", " + architect.R1 + "\n"
-        return returnValue
+        returnToken = Token(token1.name)
+        if type(token1.operation) == str:
+            returnToken.operation = token1.operation
+        else:
+            returnToken.operation = ""
+        
+        returnToken.operation += "mov " + architect.R0 + ", " + token1.name + "\n"
+        returnToken.operation += "mov " + architect.R1 + ", " + token2.name + "\n"
+        returnToken.operation += "sub " + architect.R0 + ", " + architect.R1 + "\n"
+        return returnToken
 
     # # multiply :: Token -> Token -> Token
     # @registerPrepDecorator
@@ -396,7 +434,10 @@ def tokenizeCode(inputCode):
         else:
             newOutput = runASTBranch(functions[0])
             if type(newOutput) == Token:
-                newOutput = Token.name
+                if newOutput.operation != None:
+                    newOutput = newOutput.operation
+                else:
+                    newOutput = newOutput.name
             # print(newOutput)
             output = runner(functions[1:])
             if type(newOutput) == list:

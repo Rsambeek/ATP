@@ -1,4 +1,2 @@
-int a;
-a = 100;
-int b;
-if(a)(b = 2);
+int a = 100;
+if(a)(int b = 2);
