@@ -127,12 +127,13 @@ def tokenizeCode(inputCode):
     # newInt :: Token -> List[dict] -> Token
     def newInt(identifierToken: Token) -> Token:
         returnToken = Token(identifierToken.name)
+        newAssembly = identifierToken.name + " dw 0\n" + identifierToken.name + "len equ $ - " + identifierToken.name + "\n\n"
         if type(identifierToken.operation) == str:
-            returnToken.operation = identifierToken.operation
+            returnToken.operation = identifierToken.operation[:14] + newAssembly + identifierToken.operation[14:]
+            print(returnToken.operation)
         else:
-            returnToken.operation = ""
+            returnToken.operation = "section .data\n" + identifierToken.name + " dw 0\n" + identifierToken.name + "len equ $ - " + identifierToken.name + "\n\n"
         
-        returnToken.operation += "section .data\n" + identifierToken.name + " dw 0\n" + identifierToken.name + "len equ $ - " + identifierToken.name + "\n\n"
         return returnToken
 
     # # newFloat :: Token -> List[dict] -> Token
