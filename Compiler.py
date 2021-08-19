@@ -104,11 +104,21 @@ def tokenizeCode(inputCode):
                     returnValue += "mov " + architect.REGISTERS[index] + ", " + arg.name + "\n"
                     index += 1
                 elif type(arg) == ASTBranch:
-                    returnValue += runASTBranch(arg)
+                    returnValue += compileASTBranch(arg)
             
             returnValue += func(*args, **kwargs)
             return returnValue
         return inner
+    
+    # prepareAsmStatement :: Union[str, None] -> str
+    def prepareAsmStatement(input: Union[str, None]) -> str:
+        if type(input) == str:
+            index = input.find("section .text\n")
+            if index == -1:
+                output = input + "section .text\n"
+        else:
+            output = "section .text\n"
+        return output
 
     # assignVariable :: Token -> Token -> List[dict] -> Token
     def assignVariable(token1: Token, token2: Token) -> Token:
@@ -119,6 +129,8 @@ def tokenizeCode(inputCode):
         else:
             returnToken.operation = ""
         
+        returnToken.operation = prepareAsmStatement(returnToken.operation)
+
         returnToken.operation += "mov " + architect.R0 + ", " + token2.name + "\n"
         returnToken.operation += "mov [" + token1.name + "], " + architect.R0 + "\n"
         return returnToken
@@ -127,13 +139,18 @@ def tokenizeCode(inputCode):
     # newInt :: Token -> List[dict] -> Token
     def newInt(identifierToken: Token) -> Token:
         returnToken = Token(identifierToken.name)
-        newAssembly = identifierToken.name + " dw 0\n" + identifierToken.name + "len equ $ - " + identifierToken.name + "\n\n"
+        newAssembly = identifierToken.name + " dw 0\n" + identifierToken.name + "len equ $ - " + identifierToken.name
         if type(identifierToken.operation) == str:
-            returnToken.operation = identifierToken.operation[:14] + newAssembly + identifierToken.operation[14:]
-            print(returnToken.operation)
+            index = identifierToken.operation.find("section .data\n")
+            if index != -1:
+                returnToken.operation = identifierToken.operation[:index + 14] + newAssembly + identifierToken.operation[index + 14:]
+            else:
+                returnToken.operation = "section .data\n" + newAssembly + identifierToken.operation
         else:
-            returnToken.operation = "section .data\n" + identifierToken.name + " dw 0\n" + identifierToken.name + "len equ $ - " + identifierToken.name + "\n\n"
-        
+            returnToken.operation = "section .data\n" + newAssembly
+
+        returnToken.operation += "\n"
+        # print("::" + returnToken.operation)
         return returnToken
 
     # # newFloat :: Token -> List[dict] -> Token
@@ -155,13 +172,14 @@ def tokenizeCode(inputCode):
     # ifStatement :: Token -> Union[ASTBranch, None] -> Token
     def ifStatement(token1: Token, codeBlock: Union[ASTBranch, None] = None) -> Token:
         returnToken = Token(token1.name)
+        returnToken.operation = ""
         if type(token1.operation) == str:
             returnToken.operation = token1.operation
-        else:
-            returnToken.operation = ""
+        
+        returnToken.operation = prepareAsmStatement(returnToken.operation)
         
         returnToken.operation += "mov " + architect.R0 + ", [" + token1.name + "]\ncmp " + architect.R0 + ", 0\nje _afterif" + token1.name + "\n\n"
-        returnToken.operation += runASTBranch(codeBlock).operation
+        returnToken.operation = asmMerger(returnToken.operation, compileASTBranch(codeBlock).operation)
         returnToken.operation += "\n_afterif" + token1.name + ":\n\n"
         return returnToken
 
@@ -173,8 +191,10 @@ def tokenizeCode(inputCode):
         else:
             returnToken.operation = ""
         
+        returnToken.operation = prepareAsmStatement(returnToken.operation)
+        
         returnToken.operation += "mov " + architect.R0 + ", [" + token1.name + "]\ncmp " + architect.R0 + ", 0\nje _afterwhile" + token1.name + "\n_startwhile" + token1.name + "\n\n"
-        returnToken.operation += runASTBranch(codeBlock)
+        returnToken.operation = asmMerger(returnToken.operation, compileASTBranch(codeBlock).operation)
         returnToken.operation += "mov " + architect.R0 + ", [" + token1.name + "]\ncmp " + architect.R0 + ", 0\njne _startwhile" + token1.name + "\n"
         returnToken.operation += "\n_afterwhile" + token1.name + ":\n\n"
         return returnToken
@@ -190,6 +210,8 @@ def tokenizeCode(inputCode):
         else:
             returnToken.operation = ""
         
+        returnToken.operation = prepareAsmStatement(returnToken.operation)
+        
         returnToken.operation += "mov " + architect.R0 + ", " + token1.name + "\n"
         returnToken.operation += "mov " + architect.R1 + ", " + token2.name + "\n"
         returnToken.operation += "add " + architect.R0 + ", " + architect.R1 + "\n"
@@ -203,6 +225,8 @@ def tokenizeCode(inputCode):
             returnToken.operation = token1.operation
         else:
             returnToken.operation = ""
+        
+        returnToken.operation = prepareAsmStatement(returnToken.operation)
         
         returnToken.operation += "mov " + architect.R0 + ", " + token1.name + "\n"
         returnToken.operation += "mov " + architect.R1 + ", " + token2.name + "\n"
@@ -411,8 +435,8 @@ def tokenizeCode(inputCode):
 
         return AST
 
-    # runASTBranch :: Union[ASTBranch, Token] -> str
-    def runASTBranch(input: Union[ASTBranch, Token]) -> str:
+    # compileASTBranch :: Union[ASTBranch, Token] -> str
+    def compileASTBranch(input: Union[ASTBranch, Token]) -> str:
         if type(input) == Token:
             return input
 
@@ -422,37 +446,86 @@ def tokenizeCode(inputCode):
                 return input.function(*input.arguments)
 
             else:
-                return input.function(*list(map(runASTBranch, input.arguments)))
+                return input.function(*list(map(compileASTBranch, input.arguments)))
 
         else:
             return input
+    
+    # asmMerger :: str -> str -> str
+    def asmMerger(code: str, newCode: str) -> str:
+        codeTextIndex = code.find("section .text")
+        codeDataIndex = code.find("section .data")
+        newCodeTextIndex = newCode.find("section .text")
+        newCodeDataIndex = newCode.find("section .data")
+        returnValue = ""
+        # print("::----")
+        # print(code)
+        # print("******")
+        # print(newCode)
+        # print("------")
 
-    # runner:: List[ASTBranch] -> ([str], bool)
-    def runner(functions: List[ASTBranch]) -> ([str], bool):
+        if codeDataIndex != -1 or newCodeDataIndex != -1:
+            returnValue += "section .data\n"
+    
+        if codeDataIndex != -1:
+            returnValue += code[codeDataIndex+14:codeTextIndex]
+            # print("1 " + code[codeDataIndex+14:codeTextIndex])
+            # print("----")
+        if newCodeDataIndex != -1:
+            returnValue += newCode[newCodeDataIndex+14:newCodeTextIndex]
+            # print("2 " + newCode[newCodeDataIndex+14:newCodeTextIndex])
+            # print("----")
+        
+        if len(returnValue) > 0 and returnValue[-2:] != "\n\n":
+            if returnValue[-1] != "\n":
+                returnValue += "\n"
+            returnValue += "\n"
+        
+        if codeTextIndex != -1 or newCodeTextIndex != -1:
+            returnValue += "section .text\n"
+        if codeTextIndex != -1:
+            returnValue += code[codeTextIndex+14:]
+            # print("3 " + code[codeTextIndex+14:])
+            # print("----")
+        if newCodeTextIndex != -1:
+            returnValue += newCode[newCodeTextIndex+14:]
+            # print("4 " + newCode[newCodeTextIndex+14:])
+        return returnValue
+
+    # compile:: List[ASTBranch] -> Tuple[str, bool]
+    def compile(functions: List[ASTBranch]) -> Tuple[str, bool]:
         if len(functions) <= 0:
-            output = "\nEnd of code reached\nNo errors encountered\n\nVariableDump:\n"
-            return [output], False
+            output = ""
+            # output = "\nEnd of code reached\nNo errors encountered\n\nVariableDump:\n"
+            return output, False
         else:
-            newOutput = runASTBranch(functions[0])
+            newOutput = compileASTBranch(functions[0])
             if type(newOutput) == Token:
                 if newOutput.operation != None:
                     newOutput = newOutput.operation
                 else:
                     newOutput = newOutput.name
             # print(newOutput)
-            output = runner(functions[1:])
+            output = compile(functions[1:])
             if type(newOutput) == list:
                 return newOutput + output[0], output[1]
             else:
-                output[0].insert(0, newOutput)
-                return output
+                newOutput = asmMerger(newOutput, output[0])
+                # print(newOutput)
+                # print("----")
+                # output[0].insert(0, newOutput)
+                return newOutput, output[1]
 
 
     tokens = lexer(inputCode)
     # print(tokens)
     AST = parser(tokens, environment)
-    output = runner(AST)
-    output = [reduce(lambda x,y: x+y,output[0]), output[1]]
+    output = compile(AST)
+    startText = "section .text\nglobal _start\n_start:\n"
+    endText = "section .text\nmov eax, 1\nint 0x80"
+    outputText = asmMerger(startText, output[0])
+    outputText = asmMerger(outputText, endText)
+    output = outputText, output[1]
 
 
     # print(tokens)
