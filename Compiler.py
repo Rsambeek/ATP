@@ -257,7 +257,7 @@ def tokenizeCode(inputCode):
                 # "*": Function(lambda x, y, variableScope: multiply(x, y), 2, 38, ["identifier"]),
                 # "/": Function(lambda x, y, variableScope: devide(x, y), 2, 38, ["identifier"])}
     identifier = {}
-    keyword = ["int", "float", "char", "String", "if"]
+    keyword = ["int", "float", "char", "String", "if", "while"]
     separator = [";", "(", ")", "[", "]", "{", "}"]
     operator = ["=", "+", "-", "*", "/"]
 
