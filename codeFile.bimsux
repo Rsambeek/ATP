@@ -1,4 +1,0 @@
-int a = 1;
-func function (a = a + 2);
-int b;
-if (a) (b = 2);

@@ -1,0 +1,6 @@
+int a = 1;
+func function (2 + 5);
+int b;
+if (a) (b = 1);
+
+func even (a) (if (a) ( (a = (a -1)) return (call (odd))) return (1));

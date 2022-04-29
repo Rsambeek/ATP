@@ -1,10 +1,11 @@
+from platform import architecture
 import sys
 import inspect
 from typing import Tuple, List, Union, Any, Match, Callable
 from functools import reduce
 
-from architecture import architecture, x86 as architect
-# from architecture import cortex as architect
+# from architecture import architecture, x86 as architect
+from architecture import cortex as architect
 
 # Read data from file
 inputFile = open("codeFile.bimsux", "r")
@@ -87,18 +88,23 @@ def tokenizeCode(inputCode):
         # Function for prepering registers for function
         def inner(*args, **kwargs):
             index = 0
-            returnValue = ""
+            returnValue = prepareAsmStatement("")
             for arg in args:
                 if type(arg) == Token:
-                    returnValue += "mov " + architect.REGISTERS[index] + ", " + arg.name + "\n"
-                    index += 1
+                    if (arg.tokenType == "literal"):
+                        returnValue += "\tmov " + architect.REGISTERS[index] + ", #" + arg.name + "\n"
+                    elif (arg.tokenType == "identifier"):
+                        returnValue += "\tldr " + architect.R4 + ", =" + arg.name + "\n"
+                        returnValue += "\tldr " + architect.REGISTERS[index] + ", [" + architect.R4 + "]\n"
                 elif type(arg) == ASTBranch:
-                    returnValue += compileASTBranch(arg)
+                    returnValue = asmMerger(returnValue, compileASTBranch(arg))
+                index += 1
             returnedValue = func(*args, **kwargs)
+            
             if type(returnedValue) == Token:
-                returnValue += returnedValue.operation
+                returnValue = asmMerger(returnValue, returnedValue.operation)
             elif type(returnedValue) == str:
-                returnValue += returnedValue
+                returnValue = asmMerger(returnValue, returnedValue)
             returnToken = Token(returnValue)
             returnToken.operation = returnValue
             return returnToken
@@ -108,11 +114,11 @@ def tokenizeCode(inputCode):
     def prepareAsmStatement(input: Union[str, None]) -> str:
         # Insert needed texts for compilation
         if type(input) == str:
-            index = input.find("section .text\n")
+            index = input.find(".text\n")
             if index == -1:
-                output = input + "section .text\n"
+                output = input + ".text\n"
         else:
-            output = "section .text\n"
+            output = ".text\n"
         return output
 
     # assignVariable :: Token -> Token -> Token
@@ -125,25 +131,33 @@ def tokenizeCode(inputCode):
         
         returnToken.operation = prepareAsmStatement(returnToken.operation)
 
-        returnToken.operation += "mov " + architect.R0 + ", " + token2.name + "\n"
-        returnToken.operation += "mov [" + token1.name + "], " + architect.R0 + "\n"
+        if (token2.tokenType == "literal"):
+            returnToken.operation += "\tmov " + architect.R0 + ", #" + token2.name + "\n"
+        elif (token2.tokenType == "identifier"):
+            returnToken.operation += "\tldr " + architect.R1 + ", =" + token2.name + "\n"
+            returnToken.operation += "\tldr " + architect.R0 + ", [" + architect.R1 + "]\n"
+        else:
+            returnToken.operation = asmMerger(returnToken.operation, token2.name)
+        returnToken.operation += "\tldr " + architect.R1 + ", =" + token1.name + "\n"
+        returnToken.operation += "\tstr " + architect.R0 + ", [" + architect.R1 + "]" + "\n"
         return returnToken
 
     # Definitions
     # newInt :: Token -> List[dict] -> Token
     def newInt(identifierToken: Token) -> Token:
         returnToken = Token(identifierToken.name)
-        newAssembly = identifierToken.name + " dw 0\n" + identifierToken.name + "len equ $ - " + identifierToken.name
+        newAssembly = "\t" + identifierToken.name + ": .space 4\n"
+        # newAssembly = "\t" + identifierToken.name + " dw 0\n\t" + identifierToken.name + "len equ $ - " + identifierToken.name
         if type(identifierToken.operation) == str:
-            index = identifierToken.operation.find("section .data\n")
+            index = identifierToken.operation.find(".data\n")
             if index != -1:
-                returnToken.operation = identifierToken.operation[:index + 14] + newAssembly + identifierToken.operation[index + 14:]
+                returnToken.operation = identifierToken.operation[:index + 6] + newAssembly + identifierToken.operation[index + 6:]
             else:
-                returnToken.operation = "section .data\n" + newAssembly + identifierToken.operation
+                returnToken.operation = ".data\n" + newAssembly + identifierToken.operation
         else:
-            returnToken.operation = "section .data\n" + newAssembly
+            returnToken.operation = ".data\n" + newAssembly
 
-        returnToken.operation += "\n"
+        # returnToken.operation += "\n"
         return returnToken
 
     # # newFloat :: Token -> List[dict] -> Token
@@ -161,8 +175,8 @@ def tokenizeCode(inputCode):
     #     variableList[0][identifierToken.name] = Variable(identifierToken.name, str)
     #     return identifierToken
 
-    # functionHeader :: Token -> Union[ASTBranch, None] -> Token
-    def functionHeader(token1: Token, codeBlock: Union[ASTBranch, None] = None) -> Token:
+    # functionHeader :: Token -> Union[List, Token, None] -> Union[ASTBranch, None] -> Token
+    def functionHeader(token1: Token, parameters: Union[List, Token, None] = None, codeBlock: Union[ASTBranch, None] = None) -> Token:
         returnToken = Token(token1.name)
         returnToken.operation = ""
         if type(token1.operation) == str:
@@ -170,15 +184,34 @@ def tokenizeCode(inputCode):
         
         returnToken.operation = prepareAsmStatement(returnToken.operation)
 
+        # print(parameters)
+
+        returnToken.operation += "\n\t.global " + token1.name + "\n"
+        returnToken.operation += "\tb _after" + token1.name + "\n"
         returnToken.operation += token1.name + ":\n"
+
+        if (type(parameters) == Token):
+            parameters = [parameters]
+        
+        for i in range(len(parameters)):
+            # parameters[i].operation = returnToken.operation
+            # print(newInt(parameters[i]).operation)
+            newAsm = newInt(parameters[i]).operation
+            if (returnToken.operation.find(newAsm) == -1):
+                returnToken.operation = asmMerger(returnToken.operation, newAsm)
+            
+            returnToken.operation += "\tldr " + architect.R4 + ", =" + parameters[i].name + "\n"
+            returnToken.operation += "\tldr " + architect.REGISTERS[i] + ", [" + architect.R4 + "]\n"
+
         returnToken.operation = asmMerger(returnToken.operation, compileASTBranch(codeBlock).operation)
+        returnToken.operation += "_after" + token1.name + ":\n"
         
         # pop stacked back to registers
-        returnToken.operation += "pop {"
+        returnToken.operation += "\tpop {"
         for register in architect.REGISTERS[architect.SAFEINDEX:]:
             returnToken.operation += register + ", "
         
-        returnToken.operation += "pc}\n"
+        returnToken.operation += "PC}\n\n"
         return returnToken
     
     # callFunction :: Token -> Token
@@ -192,12 +225,13 @@ def tokenizeCode(inputCode):
         returnToken.operation = prepareAsmStatement(returnToken.operation)
 
         # push registers to stack
-        returnToken.operation += "push {"
+        returnToken.operation += "\tpush {"
         for register in architect.REGISTERS[architect.SAFEINDEX:]:
             returnToken.operation += register + ", "
         
         returnToken.operation += "lr}\n"
-        returnToken.operation += "jmp " + token1.name + "\n"
+        returnToken.operation += "\tb " + token1.name + "\n"
+        return returnToken
     
     # returnFunction :: Token -> Token
     def returnFunction(token1 : Token) -> Token:
@@ -208,7 +242,12 @@ def tokenizeCode(inputCode):
         
         # Return argument from function by storing it in register 0
         returnToken.operation = prepareAsmStatement(returnToken.operation)
-        returnToken.operation += "mov " + architect.R0 + ", " + token1.name + "\n"
+
+        if (token1.tokenType == "literal"):
+            returnToken.operation += "\tmov " + architect.R0 + ", #" + token1.name + "\n"
+        elif (token1.tokenType == "identifier"):
+            returnToken.operation += "\tldr " + architect.R1 + ", =" + token1.name + "\n"
+            returnToken.operation += "\tldr " + architect.R0 + ", [" + architect.R1 + "]\n"
         return returnToken
 
     # Key Operations
@@ -221,13 +260,55 @@ def tokenizeCode(inputCode):
         
         returnToken.operation = prepareAsmStatement(returnToken.operation)
         
+        returnToken.operation += "\n"
+
         # assess execute condition
-        returnToken.operation += "mov " + architect.R0 + ", [" + token1.name + "]\ncmp " + architect.R0 + ", 0\nje _afterif" + token1.name + "\n\n"
-        returnToken.operation = asmMerger(returnToken.operation, compileASTBranch(codeBlock).operation)
-        returnToken.operation += "\n_afterif" + token1.name + ":\n\n"
+        returnedValue = compileASTBranch(codeBlock).operation
+        functionHash = hash(returnedValue)
+        functionHash += sys.maxsize + 1
+        functionHash = token1.name + str(functionHash)
+
+        if (token1.tokenType == "literal"):
+            returnToken.operation += "\tmov " + architect.R0 + ", #" + token1.name + "\n"
+        elif (token1.tokenType == "identifier"):
+            returnToken.operation += "\tldr " + architect.R1 + ", =" + token1.name + "\n"
+            returnToken.operation += "\tldr " + architect.R0 + ", [" + architect.R1 + "]\n"
+        
+        returnToken.operation += "\tcmp " + architect.R0 + ", #0\n\tbeq _afterif" + functionHash + "\n"
+        returnToken.operation = asmMerger(returnToken.operation, returnedValue)
+        returnToken.operation += "_afterif" + functionHash + ":\n\n"
         return returnToken
 
-    # whileStatement :: Token -> Union[ASTBranch, None] -> List[dict] -> Token
+    # Key Operations
+    # ifnStatement :: Token -> Union[ASTBranch, None] -> Token
+    def ifnStatement(token1: Token, codeBlock: Union[ASTBranch, None] = None) -> Token:
+        returnToken = Token(token1.name)
+        returnToken.operation = ""
+        if type(token1.operation) == str:
+            returnToken.operation = token1.operation
+        
+        returnToken.operation = prepareAsmStatement(returnToken.operation)
+        
+        returnToken.operation += "\n"
+
+        # assess execute condition
+        returnedValue = compileASTBranch(codeBlock).operation
+        functionHash = hash(returnedValue)
+        functionHash += sys.maxsize + 1
+        functionHash = token1.name + str(functionHash)
+
+        if (token1.tokenType == "literal"):
+            returnToken.operation += "\tmov " + architect.R0 + ", #" + token1.name + "\n"
+        elif (token1.tokenType == "identifier"):
+            returnToken.operation += "\tldr " + architect.R1 + ", =" + token1.name + "\n"
+            returnToken.operation += "\tldr " + architect.R0 + ", [" + architect.R1 + "]\n"
+        
+        returnToken.operation += "\tcmp " + architect.R0 + ", #0\n\tbne _afterif" + functionHash + "\n"
+        returnToken.operation = asmMerger(returnToken.operation, returnedValue)
+        returnToken.operation += "_afterif" + functionHash + ":\n\n"
+        return returnToken
+
+    # whileStatement :: Token -> ASTBranch -> List[dict] -> Token
     def whileStatement(token1: Token, codeBlock: ASTBranch) -> List[str]:
         returnToken = Token(token1.name)
         if type(token1.operation) == str:
@@ -237,10 +318,24 @@ def tokenizeCode(inputCode):
         
         returnToken.operation = prepareAsmStatement(returnToken.operation)
         
+        returnToken.operation += "\n"
+
         # assess run condition
-        returnToken.operation += "mov " + architect.R0 + ", [" + token1.name + "]\ncmp " + architect.R0 + ", 0\nje _afterwhile" + token1.name + "\n_startwhile" + token1.name + ":\n\n"
+        if (token1.tokenType == "literal"):
+            returnToken.operation += "\tmov " + architect.R0 + ", #" + token1.name + "\n"
+        elif (token1.tokenType == "identifier"):
+            returnToken.operation += "\tldr " + architect.R1 + ", =" + token1.name + "\n"
+            returnToken.operation += "\tldr " + architect.R0 + ", [" + architect.R1 + "]\n"
+        
+        returnToken.operation += "\tcmp " + architect.R0 + ", #0\tbeq _afterwhile" + token1.name + "\n_startwhile" + token1.name + ":\n\n"
         returnToken.operation = asmMerger(returnToken.operation, compileASTBranch(codeBlock).operation)
-        returnToken.operation += "mov " + architect.R0 + ", [" + token1.name + "]\ncmp " + architect.R0 + ", 0\njne _startwhile" + token1.name + "\n"
+
+        if (token1.tokenType == "literal"):
+            returnToken.operation += "\tmov " + architect.R0 + ", #" + token1.name + "\n"
+        elif (token1.tokenType == "identifier"):
+            returnToken.operation += "\tldr " + architect.R1 + ", =" + token1.name + "\n"
+            returnToken.operation += "\tldr " + architect.R0 + ", [" + architect.R1 + "]\n"
+        returnToken.operation += "\tcmp " + architect.R0 + ", #0\n\tbne _startwhile" + token1.name + "\n"
         returnToken.operation += "\n_afterwhile" + token1.name + ":\n\n"
         return returnToken
 
@@ -257,9 +352,9 @@ def tokenizeCode(inputCode):
         
         returnToken.operation = prepareAsmStatement(returnToken.operation)
         
-        returnToken.operation += "mov " + architect.R0 + ", " + token1.name + "\n"
-        returnToken.operation += "mov " + architect.R1 + ", " + token2.name + "\n"
-        returnToken.operation += "add " + architect.R0 + ", " + architect.R1 + "\n"
+        # returnToken.operation += "mov " + architect.R0 + ", " + token1.name + "\n"
+        # returnToken.operation += "mov " + architect.R1 + ", " + token2.name + "\n"
+        returnToken.operation += "\tadd " + architect.R0 + ", " + architect.R1 + "\n"
         return returnToken
 
     # subtract :: Token -> Token -> Token
@@ -273,9 +368,9 @@ def tokenizeCode(inputCode):
         
         returnToken.operation = prepareAsmStatement(returnToken.operation)
         
-        returnToken.operation += "mov " + architect.R0 + ", " + token1.name + "\n"
-        returnToken.operation += "mov " + architect.R1 + ", " + token2.name + "\n"
-        returnToken.operation += "sub " + architect.R0 + ", " + architect.R1 + "\n"
+        # returnToken.operation += "mov " + architect.R0 + ", " + token1.name + "\n"
+        # returnToken.operation += "mov " + architect.R1 + ", " + token2.name + "\n"
+        returnToken.operation += "\tsub " + architect.R0 + ", " + architect.R1 + "\n"
         return returnToken
 
     # # multiply :: Token -> Token -> Token
@@ -294,10 +389,11 @@ def tokenizeCode(inputCode):
                 # "float": Function(lambda x, variableScope: newFloat(x), 1, 10, ["identifier"]),
                 # "char": Function(lambda x, variableScope: newChar(x), 1, 10, ["identifier"]),
                 # "String": Function(lambda x, variableScope: newString(x), 1, 10, ["identifier"]),
-                "func": Function(lambda x, y, variableScope: functionHeader(x, y), 2, 10, ["identifier"]),
+                "func": Function(lambda x, y, z, variableScope: functionHeader(x, y, z), 3, 10, ["identifier"]),
                 "call": Function(lambda x, variableScope: callFunction(x), 1, 10, ["identifier"]),
                 "return": Function(lambda x, variableScope: returnFunction(x), 1, 10, ["identifier"]),
                 "if": Function(lambda x, y, variableScope: ifStatement(x, y), 2, 20, ["identifier"]),
+                "ifn": Function(lambda x, y, variableScope: ifnStatement(x, y), 2, 20, ["identifier"]),
                 "while": Function(lambda x, y, variableScope: whileStatement(x, y), 2, 20, ["identifier"]),
                 "=": Function(lambda x, y, variableScope: assignVariable(x, y), 2, 80, ["identifier"]),
                 "+": Function(lambda x, y, variableScope: add(x, y), 2, 39, ["identifier"]),
@@ -305,7 +401,7 @@ def tokenizeCode(inputCode):
                 # "*": Function(lambda x, y, variableScope: multiply(x, y), 2, 38, ["identifier"]),
                 # "/": Function(lambda x, y, variableScope: devide(x, y), 2, 38, ["identifier"])}
     identifier = {}
-    keyword = ["int", "float", "char", "String", "if", "while", "func"]
+    keyword = ["int", "float", "char", "String", "if", "ifn", "while", "func"]
     separator = [";", "(", ")", "[", "]", "{", "}"]
     operator = ["=", "+", "-", "*", "/"]
 
@@ -449,6 +545,13 @@ def tokenizeCode(inputCode):
             return currentHighest
 
         elif type(currentHighest) == Function:
+            if currentHighest.parameters == 3:
+                return ASTBranch(restFunctions[currentHighestIndex].code,
+                                    (restFunctions[currentHighestIndex + 1],
+                                    restFunctions[currentHighestIndex + 2],
+                                    restFunctions[currentHighestIndex + 3],
+                                    list(map(lambda x: environment.get(x) if (x in environment) else x, currentHighest.environment))))
+
             if currentHighest.parameters == 2:
                 if 0 < currentHighestIndex < len(restFunctions):
                     return ASTBranch(restFunctions[currentHighestIndex].code,
@@ -474,7 +577,10 @@ def tokenizeCode(inputCode):
             return treeConstructor(restFunctions, environment)
 
         else:
-            return currentHighest
+            if (len(restFunctions) > 1):
+                return restFunctions
+            else:
+                return currentHighest
 
     # parser :: List[List[Token]] -> dict -> List[Union[ASTBranch, Token]]
     def parser(tokens: List[List[Token]], environment: dict) -> List[Union[ASTBranch, Token]]:
@@ -501,28 +607,27 @@ def tokenizeCode(inputCode):
     
     # asmMerger :: str -> str -> str
     def asmMerger(code: str, newCode: str) -> str:
-        codeTextIndex = code.find("section .text")
-        codeDataIndex = code.find("section .data")
-        newCodeTextIndex = newCode.find("section .text")
-        newCodeDataIndex = newCode.find("section .data")
+        codeTextIndex = code.find(".text")
+        codeDataIndex = code.find(".data")
+        newCodeTextIndex = newCode.find(".text")
+        newCodeDataIndex = newCode.find(".data")
         returnValue = ""
-        # print("::----")
-        # print(code)
-        # print("******")
-        # print(newCode)
-        # print("------")
 
         if codeDataIndex != -1 or newCodeDataIndex != -1:
-            returnValue += "section .data\n"
+            returnValue += ".data\n"
     
         if codeDataIndex != -1:
-            returnValue += code[codeDataIndex+14:codeTextIndex]
-            # print("1 " + code[codeDataIndex+14:codeTextIndex])
-            # print("----")
+            returnValue += code[codeDataIndex+6:codeTextIndex]
+            while returnValue[-1] == "\n":
+                returnValue = returnValue[:-1]
+            returnValue += "\n"
         if newCodeDataIndex != -1:
-            returnValue += newCode[newCodeDataIndex+14:newCodeTextIndex]
-            # print("2 " + newCode[newCodeDataIndex+14:newCodeTextIndex])
-            # print("----")
+            for lines in newCode[newCodeDataIndex+6:newCodeTextIndex].split('\n'):
+                if not lines in returnValue:
+                    returnValue += lines + "\n"
+            while returnValue[-1] == "\n":
+                returnValue = returnValue[:-1]
+            returnValue += "\n"
         
         if len(returnValue) > 0 and returnValue[-2:] != "\n\n":
             if returnValue[-1] != "\n":
@@ -530,14 +635,20 @@ def tokenizeCode(inputCode):
             returnValue += "\n"
         
         if codeTextIndex != -1 or newCodeTextIndex != -1:
-            returnValue += "section .text\n"
+            returnValue += ".text\n"
         if codeTextIndex != -1:
-            returnValue += code[codeTextIndex+14:]
-            # print("3 " + code[codeTextIndex+14:])
+            returnValue += code[codeTextIndex+6:]
+            while returnValue[-1] == "\n":
+                returnValue = returnValue[:-1]
+            returnValue += "\n"
+            # print("3 " + code[codeTextIndex+6:])
             # print("----")
         if newCodeTextIndex != -1:
-            returnValue += newCode[newCodeTextIndex+14:]
-            # print("4 " + newCode[newCodeTextIndex+14:])
+            returnValue += newCode[newCodeTextIndex+6:]
+            while returnValue[-1] == "\n":
+                returnValue = returnValue[:-1]
+            returnValue += "\n"
+            # print("4 " + newCode[newCodeTextIndex+6:])
         return returnValue
 
     # compile:: List[ASTBranch] -> Tuple[str, bool]
@@ -569,8 +680,9 @@ def tokenizeCode(inputCode):
     # print(tokens)
     AST = parser(tokens, environment)
     output = compile(AST)
-    startText = "section .text\nglobal _start\n_start:\n"
-    endText = "section .text\nmov eax, 1\nint 0x80"
+    startText = ".text\n\t.global _start\n_start:\n"
+    endText = ".text\n\tmov "+ architect.R0 + ", #1"
+    # endText = ".text\n\tmov "+ architect.R0 + ", #1\n\tint 0x80"
     outputText = asmMerger(startText, output[0])
     outputText = asmMerger(outputText, endText)
     output = outputText, output[1]
@@ -590,7 +702,7 @@ output = tokenizeCode(inputCode)
 if output[1]:
     print("Something went wrong")
 
-print(output[0])
+# print(output[0])
 
 outputFile = open("out.asm", "w")
 outputFile.write(output[0])
