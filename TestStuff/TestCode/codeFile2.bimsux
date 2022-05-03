@@ -3,4 +3,9 @@ func function (2 + 5);
 int b;
 if (a) (b = 1);
 
-func even (a) (if (a) ( (a = (a -1)) return (call (odd))) return (1));
+func even (a) (if (a) ( (a = (a - 1)) return (call (odd))) return (1));
+func even (a) ((if (a) ( (a = (a - 1)) return (call (odd)))) (ifn (a) (return 1)));
+
+func odd (a) (if (a) ((a = a - 1) (return (call odd))));
+
+func odd (a) (if (a) ((a = a - 1) (return (call odd))) ifn (a) (return 1));
